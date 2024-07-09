@@ -4,8 +4,9 @@ import speech_recognition as sr
 from pydub import AudioSegment
 from io import BytesIO
 
-# Configure OpenAI API key using Streamlit secrets
+# Configure API keys using Streamlit secrets
 openai.api_key = st.secrets["openai"]["api_key"]
+groq_api_key = st.secrets["groq"]["api_key"]
 
 # Function to convert audio to text
 def audio_to_text(audio_file):
@@ -18,7 +19,7 @@ def audio_to_text(audio_file):
     return text
 
 # Function to summarize text using OpenAI API
-def summarize_text(text):
+def summarize_text_openai(text):
     response = openai.Completion.create(
         model="text-davinci-003",
         prompt=f"Summarize the following text:\n\n{text}\n\nSummary:",
@@ -26,6 +27,12 @@ def summarize_text(text):
     )
     summary = response.choices[0].text.strip()
     return summary
+
+# Function to summarize text using GROQ API (placeholder)
+def summarize_text_groq(text):
+    # This is a placeholder. You'll need to implement the actual GROQ API call here.
+    # For now, we'll just return a message indicating that GROQ summarization is not yet implemented.
+    return "GROQ summarization not yet implemented. Please use OpenAI for now."
 
 # Function to create meeting minutes
 def create_meeting_minutes(summary):
@@ -38,6 +45,7 @@ Summary: {summary}
 
 # Streamlit UI
 st.title("Speech to Text Meeting Minutes")
+api_choice = st.radio("Choose API for summarization:", ("OpenAI", "GROQ"))
 uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a"])
 
 if uploaded_file is not None:
@@ -47,7 +55,11 @@ if uploaded_file is not None:
     st.write(text)
 
     # Summarize text
-    summary = summarize_text(text)
+    if api_choice == "OpenAI":
+        summary = summarize_text_openai(text)
+    else:  # GROQ
+        summary = summarize_text_groq(text)
+    
     st.subheader("Summary")
     st.write(summary)
 
