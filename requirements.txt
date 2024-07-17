@@ -1,2 +1,4 @@
-streamlit==1.36.0
-groq==0.4.2
+streamlit
+requests
+groq
+pydub
