@@ -1,10 +1,10 @@
 import streamlit as st
 import os
 import tempfile
-from groq import Groq
+import requests
 
-# Initialize Groq client with API key from Streamlit secrets
-client = Groq(api_key=st.secrets["groq"]["api_key"])
+# Groq API endpoint
+GROQ_API_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
 
 def transcribe_audio(audio_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
@@ -13,18 +13,26 @@ def transcribe_audio(audio_file):
 
     try:
         with open(tmp_file_path, "rb") as file:
-            transcription = client.audio.transcriptions.create(
-                file=(tmp_file_path, file),
-                model="whisper-large-v3",
-                response_format="text",
-                language="en",  # Optional: specify language or let Whisper auto-detect
-                temperature=0.0  # Optional: adjust as needed
-            )
-        return transcription.text
+            files = {"file": file}
+            data = {
+                "model": "whisper-large-v3",
+                "response_format": "text",
+                "language": "en",
+                "temperature": 0.0
+            }
+            headers = {
+                "Authorization": f"Bearer {st.secrets['groq']['api_key']}"
+            }
+            response = requests.post(GROQ_API_ENDPOINT, files=files, data=data, headers=headers)
+            response.raise_for_status()
+            return response.text
     finally:
         os.unlink(tmp_file_path)
 
 st.title("Audio Transcription with Groq Whisper API")
+
+# Debug: Print first 5 characters of API key
+st.sidebar.write(f"API Key: {st.secrets['groq']['api_key'][:5]}...")
 
 uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "webm"])
 
@@ -39,3 +47,4 @@ if uploaded_file is not None:
                 st.text_area("Transcription", transcription, height=300)
             except Exception as e:
                 st.error(f"An error occurred during transcription: {str(e)}")
+                st.error(f"Full error: {repr(e)}")  # More detailed error information
