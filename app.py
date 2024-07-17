@@ -10,10 +10,21 @@ GROQ_API_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_CHAT_API_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 
 def estimate_duration(transcription):
-    # Estimate duration based on word count (assuming 150 words per minute)
     word_count = len(transcription.split())
     estimated_minutes = max(1, round(word_count / 150))
     return estimated_minutes
+
+def format_transcription(transcription):
+    # Split the transcription into sentences
+    sentences = re.split(r'(?<=[.!?])\s+', transcription)
+    
+    # Group sentences into paragraphs (e.g., every 3 sentences)
+    paragraphs = [' '.join(sentences[i:i+3]) for i in range(0, len(sentences), 3)]
+    
+    # Join paragraphs with double line breaks
+    formatted_transcription = '\n\n'.join(paragraphs)
+    
+    return formatted_transcription
 
 def transcribe_audio(audio_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
@@ -33,14 +44,13 @@ def transcribe_audio(audio_file):
             }
             response = requests.post(GROQ_API_ENDPOINT, files=files, data=data, headers=headers)
             response.raise_for_status()
-            return response.text
+            return format_transcription(response.text)
     finally:
         os.unlink(tmp_file_path)
 
 def analyze_meeting(transcription, duration_minutes):
     client = Groq(api_key=st.secrets['groq']['api_key'])
     
-    # Adjust summary length based on estimated duration
     if duration_minutes < 10:
         summary_length = "2-3 sentences"
     elif duration_minutes < 30:
