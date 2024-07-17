@@ -4,7 +4,7 @@ import tempfile
 from groq import Groq
 
 # Initialize Groq client with API key from Streamlit secrets
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+client = Groq(api_key=st.secrets["groq"]["api_key"])
 
 def transcribe_audio(audio_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
