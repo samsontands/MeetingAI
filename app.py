@@ -4,6 +4,7 @@ import tempfile
 import requests
 from groq import Groq
 import re
+import base64
 
 # Groq API endpoints
 GROQ_API_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -73,39 +74,49 @@ def extract_meeting_title(analysis):
         return title_match.group(1).strip()
     return "Untitled Meeting"
 
+def get_download_link(content, filename, text):
+    b64 = base64.b64encode(content.encode()).decode()
+    return f'<a href="data:file/txt;base64,{b64}" download="{filename}">{text}</a>'
+
 def main():
-    st.title("Meeting AI with Groq API")
-    st.sidebar.write(f"API Key: {st.secrets['groq']['api_key'][:5]}...")
+    st.set_page_config(page_title="Meeting AI Assistant", page_icon="🎙️", layout="wide")
+    
+    st.title("🎙️ Meeting AI Assistant")
+    st.write("Upload your meeting audio file and get instant transcription and analysis!")
 
     uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "webm"])
 
     if uploaded_file is not None:
         st.audio(uploaded_file)
-        if st.button("Process Meeting"):
-            with st.spinner("Transcribing and analyzing..."):
+        if st.button("🚀 Process Meeting", key="process_button"):
+            with st.spinner("Transcribing and analyzing... This may take a few minutes."):
                 try:
                     transcription = transcribe_audio(uploaded_file)
-                    st.success("Transcription complete!")
-                    st.subheader("Transcription")
-                    st.text_area("Full Transcription", transcription, height=200)
-
                     analysis = analyze_meeting(transcription)
-                    if analysis:
-                        st.success("Analysis complete!")
-                        
-                        # Extract and display the meeting title
-                        meeting_title = extract_meeting_title(analysis)
-                        new_title = st.text_input("Meeting Title", value=meeting_title)
-                        if new_title != meeting_title:
-                            st.info("Title updated!")
 
-                        # Display the full analysis
-                        st.subheader("Meeting Analysis")
-                        st.markdown(analysis)
+                    if analysis:
+                        meeting_title = extract_meeting_title(analysis)
+                        new_title = st.text_input("📌 Meeting Title", value=meeting_title)
+                        if new_title != meeting_title:
+                            st.success("Title updated!")
+
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            st.subheader("📝 Transcription")
+                            st.text_area("Full Transcription", transcription, height=300)
+                            st.markdown(get_download_link(transcription, "transcription.txt", "📥 Download Transcription"), unsafe_allow_html=True)
+
+                        with col2:
+                            st.subheader("📊 Meeting Analysis")
+                            st.markdown(analysis)
+                            st.markdown(get_download_link(analysis, "meeting_notes.md", "📥 Download Meeting Notes"), unsafe_allow_html=True)
 
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
                     st.error(f"Full error: {repr(e)}")
+    else:
+        st.info("👆 Upload an audio file to get started!")
 
 if __name__ == "__main__":
     main()
