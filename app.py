@@ -15,15 +15,9 @@ def estimate_duration(transcription):
     return estimated_minutes
 
 def format_transcription(transcription):
-    # Split the transcription into sentences
     sentences = re.split(r'(?<=[.!?])\s+', transcription)
-    
-    # Group sentences into paragraphs (e.g., every 3 sentences)
     paragraphs = [' '.join(sentences[i:i+3]) for i in range(0, len(sentences), 3)]
-    
-    # Join paragraphs with double line breaks
     formatted_transcription = '\n\n'.join(paragraphs)
-    
     return formatted_transcription
 
 def transcribe_audio(audio_file):
@@ -48,37 +42,39 @@ def transcribe_audio(audio_file):
     finally:
         os.unlink(tmp_file_path)
 
-def analyze_meeting(transcription, duration_minutes):
+def analyze_meeting_with_chapters(transcription, duration_minutes):
     client = Groq(api_key=st.secrets['groq']['api_key'])
     
-    if duration_minutes < 10:
-        summary_length = "2-3 sentences"
-    elif duration_minutes < 30:
-        summary_length = "4-5 sentences"
-    else:
-        summary_length = "6-8 sentences"
+    # Determine number of chapters based on meeting duration
+    num_chapters = max(3, min(8, duration_minutes // 5))
+    words_per_chapter = len(transcription.split()) // num_chapters
     
     prompt = f"""
-    Analyze the following meeting transcription for a meeting that lasted approximately {duration_minutes} minutes and provide:
+    Analyze the following meeting transcription for a meeting that lasted approximately {duration_minutes} minutes. 
+    Break down the meeting into {num_chapters} chapters based on the timeline and provide:
 
-    1. A summary of the meeting ({summary_length})
-    2. Sentiment analysis (percentage of positive, negative, and neutral sentiments)
-    3. Top 3-5 topic trackers (main themes discussed)
-    4. A suggested title for the meeting
-    5. Key points discussed (bullet points)
-    6. Action items (bullet points)
-    7. Next steps (bullet points)
+    1. A brief overview of the entire meeting (2-3 sentences)
+    2. For each chapter:
+       a) Timestamp (approximate, based on the position in the transcription)
+       b) Chapter title
+       c) Brief summary of the chapter (1-2 sentences)
+    3. Overall sentiment analysis (percentage of positive, negative, and neutral sentiments)
+    4. Top 3-5 topic trackers (main themes discussed throughout the meeting)
+    5. Key action items and next steps (as bullet points)
 
     Meeting Transcription:
     {transcription}
 
     Format the analysis in a clear and concise manner, using markdown for headers and bullet points.
+    Use the following format for chapters:
+    ## [Timestamp] Chapter Title
+    Chapter summary
     """
 
     try:
         response = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that analyzes meetings."},
+                {"role": "system", "content": "You are a helpful assistant that analyzes meetings and creates timeline-based summaries."},
                 {"role": "user", "content": prompt}
             ],
             model="mixtral-8x7b-32768",
@@ -100,7 +96,7 @@ def main():
     st.set_page_config(page_title="Meeting AI Assistant", page_icon="🎙️", layout="wide")
     
     st.title("🎙️ Meeting AI Assistant")
-    st.write("Upload your meeting audio file and get instant transcription and analysis!")
+    st.write("Upload your meeting audio file and get instant transcription and timeline-based analysis!")
 
     uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "webm"])
 
@@ -111,14 +107,9 @@ def main():
                 try:
                     transcription = transcribe_audio(uploaded_file)
                     duration_minutes = estimate_duration(transcription)
-                    analysis = analyze_meeting(transcription, duration_minutes)
+                    analysis = analyze_meeting_with_chapters(transcription, duration_minutes)
 
                     if analysis:
-                        meeting_title = extract_meeting_title(analysis)
-                        new_title = st.text_input("📌 Meeting Title", value=meeting_title)
-                        if new_title != meeting_title:
-                            st.success("Title updated!")
-
                         st.subheader(f"📊 Estimated Meeting Duration: {duration_minutes} minutes")
 
                         col1, col2 = st.columns(2)
