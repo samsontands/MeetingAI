@@ -14,9 +14,11 @@ def transcribe_audio(audio_file):
     try:
         with open(tmp_file_path, "rb") as file:
             transcription = client.audio.transcriptions.create(
-                file=(os.path.basename(tmp_file_path), file),
+                file=(tmp_file_path, file),
                 model="whisper-large-v3",
-                response_format="text"
+                response_format="text",
+                language="en",  # Optional: specify language or let Whisper auto-detect
+                temperature=0.0  # Optional: adjust as needed
             )
         return transcription.text
     finally:
@@ -24,13 +26,16 @@ def transcribe_audio(audio_file):
 
 st.title("Audio Transcription with Groq Whisper API")
 
-uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "m4a"])
+uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "webm"])
 
 if uploaded_file is not None:
-    st.audio(uploaded_file, format="audio/wav")
+    st.audio(uploaded_file)
 
     if st.button("Transcribe"):
         with st.spinner("Transcribing..."):
-            transcription = transcribe_audio(uploaded_file)
-        st.success("Transcription complete!")
-        st.text_area("Transcription", transcription, height=300)
+            try:
+                transcription = transcribe_audio(uploaded_file)
+                st.success("Transcription complete!")
+                st.text_area("Transcription", transcription, height=300)
+            except Exception as e:
+                st.error(f"An error occurred during transcription: {str(e)}")
