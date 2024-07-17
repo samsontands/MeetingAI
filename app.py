@@ -1,69 +1,36 @@
 import streamlit as st
-import openai
-import speech_recognition as sr
-from pydub import AudioSegment
-from io import BytesIO
+import os
+import tempfile
+from groq import Groq
 
-# Configure API keys using Streamlit secrets
-openai.api_key = st.secrets["openai"]["api_key"]
-groq_api_key = st.secrets["groq"]["api_key"]
+# Initialize Groq client with API key from Streamlit secrets
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Function to convert audio to text
-def audio_to_text(audio_file):
-    recognizer = sr.Recognizer()
-    audio = AudioSegment.from_file(audio_file)
-    audio.export("temp.wav", format="wav")
-    with sr.AudioFile("temp.wav") as source:
-        audio_data = recognizer.record(source)
-    text = recognizer.recognize_google(audio_data)
-    return text
+def transcribe_audio(audio_file):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+        tmp_file.write(audio_file.getvalue())
+        tmp_file_path = tmp_file.name
 
-# Function to summarize text using OpenAI API
-def summarize_text_openai(text):
-    response = openai.Completion.create(
-        model="text-davinci-003",
-        prompt=f"Summarize the following text:\n\n{text}\n\nSummary:",
-        max_tokens=150
-    )
-    summary = response.choices[0].text.strip()
-    return summary
+    try:
+        with open(tmp_file_path, "rb") as file:
+            transcription = client.audio.transcriptions.create(
+                file=(os.path.basename(tmp_file_path), file),
+                model="whisper-large-v3",
+                response_format="text"
+            )
+        return transcription.text
+    finally:
+        os.unlink(tmp_file_path)
 
-# Function to summarize text using GROQ API (placeholder)
-def summarize_text_groq(text):
-    # This is a placeholder. You'll need to implement the actual GROQ API call here.
-    # For now, we'll just return a message indicating that GROQ summarization is not yet implemented.
-    return "GROQ summarization not yet implemented. Please use OpenAI for now."
+st.title("Audio Transcription with Groq Whisper API")
 
-# Function to create meeting minutes
-def create_meeting_minutes(summary):
-    meeting_minutes = f"""
-Meeting Minutes
----------------
-Summary: {summary}
-"""
-    return meeting_minutes
-
-# Streamlit UI
-st.title("Speech to Text Meeting Minutes")
-api_choice = st.radio("Choose API for summarization:", ("OpenAI", "GROQ"))
-uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a"])
+uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "m4a"])
 
 if uploaded_file is not None:
-    # Convert audio to text
-    text = audio_to_text(uploaded_file)
-    st.subheader("Transcription")
-    st.write(text)
+    st.audio(uploaded_file, format="audio/wav")
 
-    # Summarize text
-    if api_choice == "OpenAI":
-        summary = summarize_text_openai(text)
-    else:  # GROQ
-        summary = summarize_text_groq(text)
-    
-    st.subheader("Summary")
-    st.write(summary)
-
-    # Create meeting minutes
-    meeting_minutes = create_meeting_minutes(summary)
-    st.subheader("Meeting Minutes")
-    st.write(meeting_minutes)
+    if st.button("Transcribe"):
+        with st.spinner("Transcribing..."):
+            transcription = transcribe_audio(uploaded_file)
+        st.success("Transcription complete!")
+        st.text_area("Transcription", transcription, height=300)
