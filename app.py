@@ -3,6 +3,7 @@ import os
 import tempfile
 import requests
 from groq import Groq
+import re
 
 # Groq API endpoints
 GROQ_API_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -30,27 +31,31 @@ def transcribe_audio(audio_file):
     finally:
         os.unlink(tmp_file_path)
 
-def summarize_meeting(transcription):
+def analyze_meeting(transcription):
     client = Groq(api_key=st.secrets['groq']['api_key'])
     
     prompt = f"""
-    Please summarize the following meeting transcription:
+    Analyze the following meeting transcription and provide:
 
+    1. A brief summary of the meeting (max 3 sentences)
+    2. Total time of the meeting (estimate based on word count, assume 150 words per minute)
+    3. Sentiment analysis (percentage of positive, negative, and neutral sentiments)
+    4. Top 3 topic trackers (main themes discussed)
+    5. A suggested title for the meeting
+    6. Key points discussed
+    7. Action items
+    8. Next steps
+
+    Meeting Transcription:
     {transcription}
 
-    Provide the following:
-    1. A brief overview of the meeting
-    2. Key points discussed
-    3. Action items
-    4. Next steps
-
-    Format the summary in a clear and concise manner.
+    Format the analysis in a clear and concise manner, using markdown for headers.
     """
 
     try:
         response = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that summarizes meetings."},
+                {"role": "system", "content": "You are a helpful assistant that analyzes meetings."},
                 {"role": "user", "content": prompt}
             ],
             model="mixtral-8x7b-32768",
@@ -59,12 +64,17 @@ def summarize_meeting(transcription):
         )
         return response.choices[0].message.content
     except Exception as e:
-        st.error(f"An error occurred during summarization: {str(e)}")
+        st.error(f"An error occurred during analysis: {str(e)}")
         return None
+
+def extract_meeting_title(analysis):
+    title_match = re.search(r"#+\s*Suggested Title[:\n\s]*(.*)", analysis)
+    if title_match:
+        return title_match.group(1).strip()
+    return "Untitled Meeting"
 
 def main():
     st.title("Meeting AI with Groq API")
-
     st.sidebar.write(f"API Key: {st.secrets['groq']['api_key'][:5]}...")
 
     uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "webm"])
@@ -72,18 +82,27 @@ def main():
     if uploaded_file is not None:
         st.audio(uploaded_file)
         if st.button("Process Meeting"):
-            with st.spinner("Transcribing and summarizing..."):
+            with st.spinner("Transcribing and analyzing..."):
                 try:
                     transcription = transcribe_audio(uploaded_file)
                     st.success("Transcription complete!")
                     st.subheader("Transcription")
                     st.text_area("Full Transcription", transcription, height=200)
 
-                    summary = summarize_meeting(transcription)
-                    if summary:
-                        st.success("Summary generated!")
-                        st.subheader("Meeting Summary")
-                        st.markdown(summary)
+                    analysis = analyze_meeting(transcription)
+                    if analysis:
+                        st.success("Analysis complete!")
+                        
+                        # Extract and display the meeting title
+                        meeting_title = extract_meeting_title(analysis)
+                        new_title = st.text_input("Meeting Title", value=meeting_title)
+                        if new_title != meeting_title:
+                            st.info("Title updated!")
+
+                        # Display the full analysis
+                        st.subheader("Meeting Analysis")
+                        st.markdown(analysis)
+
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
                     st.error(f"Full error: {repr(e)}")
