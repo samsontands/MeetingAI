@@ -4,18 +4,16 @@ import tempfile
 import requests
 from groq import Groq
 import re
-from io import BytesIO
-from pydub import AudioSegment
-import math
 
 # Groq API endpoints
 GROQ_API_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_CHAT_API_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 
-def get_audio_duration(audio_file):
-    audio = AudioSegment.from_file(BytesIO(audio_file.getvalue()), format=audio_file.type.split('/')[1])
-    duration_seconds = len(audio) / 1000
-    return math.ceil(duration_seconds)
+def estimate_duration(transcription):
+    # Estimate duration based on word count (assuming 150 words per minute)
+    word_count = len(transcription.split())
+    estimated_minutes = max(1, round(word_count / 150))
+    return estimated_minutes
 
 def transcribe_audio(audio_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
@@ -39,21 +37,19 @@ def transcribe_audio(audio_file):
     finally:
         os.unlink(tmp_file_path)
 
-def analyze_meeting(transcription, duration_seconds):
+def analyze_meeting(transcription, duration_minutes):
     client = Groq(api_key=st.secrets['groq']['api_key'])
     
-    # Adjust summary length based on meeting duration
-    if duration_seconds < 600:  # Less than 10 minutes
+    # Adjust summary length based on estimated duration
+    if duration_minutes < 10:
         summary_length = "2-3 sentences"
-    elif duration_seconds < 1800:  # 10-30 minutes
+    elif duration_minutes < 30:
         summary_length = "4-5 sentences"
-    else:  # More than 30 minutes
+    else:
         summary_length = "6-8 sentences"
     
-    duration_minutes = math.ceil(duration_seconds / 60)
-    
     prompt = f"""
-    Analyze the following meeting transcription for a meeting that lasted {duration_minutes} minutes and provide:
+    Analyze the following meeting transcription for a meeting that lasted approximately {duration_minutes} minutes and provide:
 
     1. A summary of the meeting ({summary_length})
     2. Sentiment analysis (percentage of positive, negative, and neutral sentiments)
@@ -103,9 +99,9 @@ def main():
         if st.button("🚀 Process Meeting", key="process_button"):
             with st.spinner("Transcribing and analyzing... This may take a few minutes."):
                 try:
-                    duration_seconds = get_audio_duration(uploaded_file)
                     transcription = transcribe_audio(uploaded_file)
-                    analysis = analyze_meeting(transcription, duration_seconds)
+                    duration_minutes = estimate_duration(transcription)
+                    analysis = analyze_meeting(transcription, duration_minutes)
 
                     if analysis:
                         meeting_title = extract_meeting_title(analysis)
@@ -113,7 +109,7 @@ def main():
                         if new_title != meeting_title:
                             st.success("Title updated!")
 
-                        st.subheader(f"📊 Meeting Duration: {math.ceil(duration_seconds / 60)} minutes")
+                        st.subheader(f"📊 Estimated Meeting Duration: {duration_minutes} minutes")
 
                         col1, col2 = st.columns(2)
 
